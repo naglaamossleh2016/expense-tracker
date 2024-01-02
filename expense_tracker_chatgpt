@@ -1,0 +1,126 @@
+import tkinter as tk
+from tkinter import ttk, messagebox
+from tkcalendar import DateEntry
+import json
+import requests
+
+class ExpenseTrackerApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.geometry("1200x600")
+        self.root.title("Expense tracker Al-Madrasa")
+
+        self.payload = {}
+        self.headers = {"apikey": "6Hm25XXamrWza0StHe1WaFZNhWpXnzEP"}
+
+        self.setup_ui()
+
+    def setup_ui(self):
+        # Top Frame
+        top_frame = tk.Frame(self.root)
+
+        tk.Label(top_frame, text="Amount").grid(row=0)
+        self.amount_val = tk.Entry(top_frame, width=30)
+        self.amount_val.grid(row=0, column=1, ipady=5, pady=5)
+
+        tk.Label(top_frame, text="Currency").grid(row=1)
+        clicked = tk.StringVar()
+        self.currency_drop = ttk.Combobox(top_frame, textvariable=clicked, width=27)
+        self.currency_drop['values'] = ["EUR", "GBP", "USD"]
+        self.currency_drop.current(2)
+        self.currency_drop.grid(row=1, column=1, pady=5)
+
+        tk.Label(top_frame, text="Category").grid(row=3)
+        cat_clicked = tk.StringVar()
+        self.category_drop = ttk.Combobox(top_frame, textvariable=cat_clicked, width=27)
+        self.category_drop['values'] = ["Saving", "Gas", "Water", "Electricity", "Food", "Medicine", "Other"]
+        self.category_drop.current(0)
+        self.category_drop.grid(row=3, column=1, pady=5)
+
+        tk.Label(top_frame, text="Payment Method").grid(row=4)
+        pay_clicked = tk.StringVar()
+        self.payment_drop = ttk.Combobox(top_frame, textvariable=pay_clicked, width=27)
+        self.payment_drop['values'] = ["Paypal", "Visa", "Cash"]
+        self.payment_drop.current(2)
+        self.payment_drop.grid(row=4, column=1, pady=5)
+
+        tk.Label(top_frame, text="Date").grid(row=5)
+        self.cal = DateEntry(top_frame, selectmode='day', width=27)
+        self.cal.grid(row=5, column=1, ipady=5, pady=5)
+
+        add_btn = tk.Button(top_frame, text="Add Expense", width=15, command=self.insert_data, bg="orange")
+        add_btn.grid(row=6, column=0, pady=5)
+
+        show_btn = tk.Button(top_frame, text="Show Expense In Dollar", command=self.show_expense_in_dollar, bg="yellow")
+        show_btn.grid(row=6, column=1, pady=5)
+
+        top_frame.pack()
+
+        # Bottom Frame
+        bottom_frame = tk.Frame(self.root, width=500)
+
+        columns = ('Amount', 'Currency', 'Category', 'Payment_Method', 'Date')
+        self.tree = ttk.Treeview(bottom_frame, columns=columns, show='headings')
+
+        for col in columns:
+            self.tree.heading(col, text=col, anchor='center')
+            self.tree.column(col, anchor='center')
+
+        self.tree.grid(row=0, column=1)
+        scrollbar = ttk.Scrollbar(bottom_frame, orient=tk.VERTICAL, command=self.tree.yview)
+        self.tree.configure(yscroll=scrollbar.set)
+        scrollbar.grid(row=0, column=2, sticky='ns')
+        bottom_frame.pack()
+
+    def show_expense_in_dollar(self):
+        total = 0.0
+        for child in self.tree.get_children():
+            amount = float(self.tree.item(child, 'values')[0])
+            from_cur = self.tree.item(child, 'values')[1]
+            total += float(self.convert_currency(amount, from_cur))
+
+        total_item = self.tree.tag_has('total')
+        if total_item:
+            self.tree.delete(total_item)
+
+        self.tree.insert('', 'end', values=(total, "USD"), tags=('total',))
+        self.tree.tag_configure('total', background='yellow')
+
+    def convert_currency(self, amount, from_cur):
+        url = f"https://api.apilayer.com/fixer/convert?to=USD&from={from_cur}&amount={amount}"
+        response = requests.get(url, headers=self.headers, data=self.payload)
+
+        status_code = response.status_code
+        if status_code == 200:
+            try:
+                result = json.loads(response.text)
+                return result.get("result")
+            except json.JSONDecodeError as e:
+                print("Error decoding JSON:", e)
+        else:
+            print(f"Failed to fetch data. Status code: {status_code}")
+
+    def insert_data(self):
+        if len(self.amount_val.get()) == 0:
+            messagebox.showwarning("Warning", "Enter Amount")
+        else:
+            try:
+                amount = float(self.amount_val.get())
+                currency = self.currency_drop.get()
+                category = self.category_drop.get()
+                payment_method = self.payment_drop.get()
+                date = self.cal.get_date()
+
+                total_item = self.tree.tag_has('total')
+                if total_item:
+                    self.tree.delete(total_item)
+
+                self.tree.insert('', 'end', values=(amount, currency, category, payment_method, date))
+                self.amount_val.delete(0, tk.END)
+            except ValueError:
+                messagebox.showwarning("Warning", "Amount must be a number")
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = ExpenseTrackerApp(root)
+    root.mainloop()
